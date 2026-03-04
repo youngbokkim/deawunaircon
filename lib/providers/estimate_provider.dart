@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../data/sample_estimates.dart';
 import '../models/estimate.dart';
 import '../models/estimate_item.dart';
 import '../models/detail_item.dart';
@@ -6,6 +7,13 @@ import '../models/detail_item.dart';
 class EstimateProvider with ChangeNotifier {
   Estimate _currentEstimate = Estimate();
   final List<Estimate> _estimates = [];
+
+  /// 저장된 견적이 없을 때만 샘플 견적서를 목록에 추가합니다.
+  void loadSampleEstimatesIfEmpty() {
+    if (_estimates.isNotEmpty) return;
+    _estimates.addAll(SampleEstimates.list);
+    notifyListeners();
+  }
 
   Estimate get currentEstimate => _currentEstimate;
   List<Estimate> get estimates => _estimates;

@@ -14,7 +14,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => EstimateProvider(),
+      create: (_) {
+        final provider = EstimateProvider();
+        provider.loadSampleEstimatesIfEmpty();
+        return provider;
+      },
       child: MaterialApp(
         title: '대운공조시스템 - 에어컨 견적서',
         theme: AppTheme.theme,

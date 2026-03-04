@@ -1,10 +1,11 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:printing/printing.dart';
 import '../providers/estimate_provider.dart';
 import '../utils/app_theme.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/pdf_generator.dart';
+import 'pdf_preview_screen.dart';
 
 class EstimatePreviewScreen extends StatelessWidget {
   const EstimatePreviewScreen({super.key});
@@ -24,9 +25,21 @@ class EstimatePreviewScreen extends StatelessWidget {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.print_outlined),
-              tooltip: '인쇄 / PDF 저장',
-              onPressed: () => _printEstimate(context),
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              tooltip: 'PDF 미리보기',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PdfPreviewScreen(),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.save_alt_outlined),
+              tooltip: 'PDF 파일로 저장',
+              onPressed: () => _savePdfFile(context),
             ),
           ],
         ),
@@ -40,14 +53,45 @@ class EstimatePreviewScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _printEstimate(BuildContext context) async {
+  Future<void> _savePdfFile(BuildContext context) async {
     final provider = context.read<EstimateProvider>();
     final estimate = provider.currentEstimate;
+    final fileName = _sanitizeFileName('견적서_${estimate.projectName}.pdf');
 
-    await Printing.layoutPdf(
-      onLayout: (format) => PdfGenerator.generateEstimatePdf(estimate),
-      name: '견적서_${estimate.projectName}',
-    );
+    try {
+      final bytes = await PdfGenerator.generateEstimatePdf(estimate);
+      final path = await FilePicker.platform.saveFile(
+        bytes: bytes,
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              path != null && path.isNotEmpty
+                  ? 'PDF가 저장되었습니다.\n$path'
+                  : 'PDF 파일이 저장되었습니다.',
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF 저장 실패: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  static String _sanitizeFileName(String name) {
+    return name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
   }
 }
 
@@ -534,23 +578,48 @@ class _DetailPreview extends StatelessWidget {
   }
 
   Widget _buildDetailTable(dynamic estimate) {
+    // 항목별 가독성을 위해 열마다 충분한 최소 너비 부여 (가로 스크롤로 전체 확인)
+    const colNo = 44.0;
+    const colProduct = 140.0;
+    const colSpec = 110.0;
+    const colUnit = 52.0;
+    const colQty = 52.0;
+    const colMoney = 88.0; // 단가/금액 열 각각
+    const colNote = 100.0;
+
     return Table(
       border: TableBorder.all(color: AppTheme.borderColor),
-      defaultColumnWidth: const IntrinsicColumnWidth(),
+      columnWidths: const {
+        0: FixedColumnWidth(colNo),
+        1: FixedColumnWidth(colProduct),
+        2: FixedColumnWidth(colSpec),
+        3: FixedColumnWidth(colUnit),
+        4: FixedColumnWidth(colQty),
+        5: FixedColumnWidth(colMoney),
+        6: FixedColumnWidth(colMoney),
+        7: FixedColumnWidth(colMoney),
+        8: FixedColumnWidth(colMoney),
+        9: FixedColumnWidth(colMoney),
+        10: FixedColumnWidth(colMoney),
+        11: FixedColumnWidth(colNote),
+      },
       children: [
-        // 헤더 1
+        // 헤더 1 (모든 행은 12열로 통일)
         TableRow(
           decoration: BoxDecoration(color: AppTheme.tableHeaderColor),
           children: [
-            _buildHeaderCell('No', width: 40),
-            _buildHeaderCell('품명', width: 150),
-            _buildHeaderCell('규격', width: 100),
-            _buildHeaderCell('단위', width: 50),
-            _buildHeaderCell('수량', width: 50),
-            _buildHeaderCell('재료비', width: 160, colSpan: true),
-            _buildHeaderCell('노무비', width: 160, colSpan: true),
-            _buildHeaderCell('합계', width: 160, colSpan: true),
-            _buildHeaderCell('비고', width: 80),
+            _buildHeaderCell('No'),
+            _buildHeaderCell('품명'),
+            _buildHeaderCell('규격'),
+            _buildHeaderCell('단위'),
+            _buildHeaderCell('수량'),
+            _buildHeaderCell('재료비'),
+            _buildHeaderCell(''),
+            _buildHeaderCell('노무비'),
+            _buildHeaderCell(''),
+            _buildHeaderCell('합계'),
+            _buildHeaderCell(''),
+            _buildHeaderCell('비고'),
           ],
         ),
         // 헤더 2
@@ -648,10 +717,10 @@ class _DetailPreview extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderCell(String text, {double width = 80, bool colSpan = false}) {
+  Widget _buildHeaderCell(String text) {
     return Container(
-      width: colSpan ? width : width,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      alignment: Alignment.center,
       child: Text(
         text,
         textAlign: TextAlign.center,
@@ -683,6 +752,11 @@ class _DetailPreview extends StatelessWidget {
       {bool center = false, bool right = false, bool bold = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      alignment: right
+          ? Alignment.centerRight
+          : center
+              ? Alignment.center
+              : Alignment.centerLeft,
       child: Text(
         text,
         textAlign: right
@@ -690,8 +764,10 @@ class _DetailPreview extends StatelessWidget {
             : center
                 ? TextAlign.center
                 : TextAlign.left,
+        softWrap: true,
+        overflow: TextOverflow.visible,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
         ),
       ),

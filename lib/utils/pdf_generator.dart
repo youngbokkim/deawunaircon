@@ -1,19 +1,37 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../models/estimate.dart';
 import 'currency_formatter.dart';
 
 class PdfGenerator {
   static Future<Uint8List> generateEstimatePdf(Estimate estimate) async {
-    final pdf = pw.Document();
+    // 한글 표시: 앱 번들 폰트 우선 사용 (맥 PDF 미리보기 등에서 안정적), 없으면 Google Fonts
+    pw.Font fontBase;
+    pw.Font fontBold;
+    try {
+      final data = await rootBundle.load('assets/fonts/NotoSansKR-Variable.ttf');
+      fontBase = pw.Font.ttf(data);
+      fontBold = fontBase; // Variable font 하나로 통일
+    } catch (_) {
+      fontBase = await PdfGoogleFonts.notoSansKRRegular();
+      fontBold = await PdfGoogleFonts.notoSansKRBold();
+    }
+    final theme = pw.ThemeData.withFont(
+      base: fontBase,
+      bold: fontBold,
+    );
+
+    final pdf = pw.Document(theme: theme);
 
     // 견적서 페이지
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
-        build: (context) => _buildEstimatePage(estimate),
+        build: (context) => _buildEstimatePage(estimate, fontBase, fontBold),
       ),
     );
 
@@ -24,7 +42,7 @@ class PdfGenerator {
           pageFormat: PdfPageFormat.a4,
           orientation: pw.PageOrientation.landscape,
           margin: const pw.EdgeInsets.all(30),
-          build: (context) => _buildDetailPage(estimate),
+          build: (context) => _buildDetailPage(estimate, fontBase, fontBold),
         ),
       );
     }
@@ -32,7 +50,8 @@ class PdfGenerator {
     return pdf.save();
   }
 
-  static pw.Widget _buildEstimatePage(Estimate estimate) {
+  static pw.Widget _buildEstimatePage(
+      Estimate estimate, pw.Font fontBase, pw.Font fontBold) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
@@ -45,17 +64,14 @@ class PdfGenerator {
               children: [
                 pw.Text(
                   estimate.companyInfo.name,
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
+                  style: pw.TextStyle(font: fontBold, fontSize: 20),
                 ),
                 pw.SizedBox(height: 4),
-                _buildInfoText('주소: ${estimate.companyInfo.address}'),
-                _buildInfoText('담당HP: ${estimate.companyInfo.mobile}'),
-                _buildInfoText('TEL: ${estimate.companyInfo.phone}'),
-                _buildInfoText('FAX: ${estimate.companyInfo.fax}'),
-                _buildInfoText('E-mail: ${estimate.companyInfo.email}'),
+                _buildInfoText('주소: ${estimate.companyInfo.address}', fontBase),
+                _buildInfoText('담당HP: ${estimate.companyInfo.mobile}', fontBase),
+                _buildInfoText('TEL: ${estimate.companyInfo.phone}', fontBase),
+                _buildInfoText('FAX: ${estimate.companyInfo.fax}', fontBase),
+                _buildInfoText('E-mail: ${estimate.companyInfo.email}', fontBase),
               ],
             ),
           ],
@@ -66,10 +82,7 @@ class PdfGenerator {
         pw.Center(
           child: pw.Text(
             '견   적   서',
-            style: pw.TextStyle(
-              fontSize: 24,
-              fontWeight: pw.FontWeight.bold,
-            ),
+            style: pw.TextStyle(font: fontBold, fontSize: 24),
           ),
         ),
         pw.SizedBox(height: 20),
@@ -82,8 +95,8 @@ class PdfGenerator {
           ),
           child: pw.Row(
             children: [
-              pw.Text('■ 공사: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text(estimate.projectName),
+              pw.Text('■ 공사: ', style: pw.TextStyle(font: fontBold)),
+              pw.Text(estimate.projectName, style: pw.TextStyle(font: fontBase)),
             ],
           ),
         ),
@@ -97,15 +110,15 @@ class PdfGenerator {
           ),
           child: pw.Column(
             children: [
-              pw.Text('금  액', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text('금  액', style: pw.TextStyle(font: fontBold)),
               pw.SizedBox(height: 4),
               pw.Text(
                 estimate.amountInKorean,
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(font: fontBold, fontSize: 14),
               ),
               pw.Text(
                 CurrencyFormatter.formatWithWon(estimate.totalAmount),
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(font: fontBold, fontSize: 18),
               ),
             ],
           ),
@@ -116,7 +129,7 @@ class PdfGenerator {
             padding: const pw.EdgeInsets.only(top: 4),
             child: pw.Text(
               DateFormatter.format(estimate.estimateDate),
-              style: const pw.TextStyle(fontSize: 10),
+              style: pw.TextStyle(font: fontBase, fontSize: 10),
             ),
           ),
         ),
@@ -129,18 +142,18 @@ class PdfGenerator {
           child: pw.Center(
             child: pw.Text(
               estimate.projectName,
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(font: fontBold),
             ),
           ),
         ),
         pw.SizedBox(height: 12),
 
         // 견적 테이블
-        _buildEstimateTable(estimate),
+        _buildEstimateTable(estimate, fontBase, fontBold),
         pw.SizedBox(height: 16),
 
         // 조건
-        _buildConditions(estimate),
+        _buildConditions(estimate, fontBase, fontBold),
         pw.SizedBox(height: 12),
 
         // 입금 계좌
@@ -151,7 +164,7 @@ class PdfGenerator {
           ),
           child: pw.Text(
             '입금계좌번호: ${estimate.companyInfo.bankAccount}',
-            style: const pw.TextStyle(fontSize: 10),
+            style: pw.TextStyle(font: fontBase, fontSize: 10),
           ),
         ),
         pw.SizedBox(height: 8),
@@ -165,7 +178,7 @@ class PdfGenerator {
           child: pw.Center(
             child: pw.Text(
               '본 견적서는 필요시 약식 계약서 내지는 설치의뢰로 갈음합니다.',
-              style: const pw.TextStyle(fontSize: 9),
+              style: pw.TextStyle(font: fontBase, fontSize: 9),
             ),
           ),
         ),
@@ -173,14 +186,15 @@ class PdfGenerator {
     );
   }
 
-  static pw.Widget _buildInfoText(String text) {
+  static pw.Widget _buildInfoText(String text, pw.Font font) {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 2),
-      child: pw.Text(text, style: const pw.TextStyle(fontSize: 9)),
+      child: pw.Text(text, style: pw.TextStyle(font: font, fontSize: 9)),
     );
   }
 
-  static pw.Widget _buildEstimateTable(Estimate estimate) {
+  static pw.Widget _buildEstimateTable(
+      Estimate estimate, pw.Font fontBase, pw.Font fontBold) {
     return pw.Table(
       border: pw.TableBorder.all(),
       columnWidths: {
@@ -197,26 +211,26 @@ class PdfGenerator {
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: PdfColors.grey800),
           children: [
-            _buildTableHeader('품  명'),
-            _buildTableHeader('규  격'),
-            _buildTableHeader('단위'),
-            _buildTableHeader('수량'),
-            _buildTableHeader('단  가'),
-            _buildTableHeader('금  액'),
-            _buildTableHeader('비고'),
+            _buildTableHeader('품  명', fontBold),
+            _buildTableHeader('규  격', fontBold),
+            _buildTableHeader('단위', fontBold),
+            _buildTableHeader('수량', fontBold),
+            _buildTableHeader('단  가', fontBold),
+            _buildTableHeader('금  액', fontBold),
+            _buildTableHeader('비고', fontBold),
           ],
         ),
         // 데이터
         ...estimate.items.map((item) {
           return pw.TableRow(
             children: [
-              _buildTableCell(item.productName),
-              _buildTableCell(item.specification),
-              _buildTableCell(item.unit, center: true),
-              _buildTableCell(item.quantity.toString(), center: true),
-              _buildTableCell(CurrencyFormatter.format(item.unitPrice), right: true),
-              _buildTableCell(CurrencyFormatter.format(item.amount), right: true),
-              _buildTableCell(item.note),
+              _buildTableCell(item.productName, fontBase),
+              _buildTableCell(item.specification, fontBase),
+              _buildTableCell(item.unit, fontBase, center: true),
+              _buildTableCell(item.quantity.toString(), fontBase, center: true),
+              _buildTableCell(CurrencyFormatter.format(item.unitPrice), fontBase, right: true),
+              _buildTableCell(CurrencyFormatter.format(item.amount), fontBase, right: true),
+              _buildTableCell(item.note, fontBase),
             ],
           );
         }),
@@ -224,40 +238,41 @@ class PdfGenerator {
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: PdfColors.grey200),
           children: [
-            _buildTableCell('합  계', bold: true, center: true),
-            _buildTableCell(''),
-            _buildTableCell(''),
-            _buildTableCell(''),
-            _buildTableCell(''),
+            _buildTableCell('합  계', fontBold, center: true),
+            _buildTableCell('', fontBase),
+            _buildTableCell('', fontBase),
+            _buildTableCell('', fontBase),
+            _buildTableCell('', fontBase),
+            _buildTableCell('', fontBase),
             _buildTableCell(
               CurrencyFormatter.format(estimate.totalAmount),
+              fontBold,
               right: true,
-              bold: true,
             ),
-            _buildTableCell(estimate.includeVat ? '' : 'VAT별도'),
+            _buildTableCell(estimate.includeVat ? '' : 'VAT별도', fontBase),
           ],
         ),
       ],
     );
   }
 
-  static pw.Widget _buildTableHeader(String text) {
+  static pw.Widget _buildTableHeader(String text, pw.Font font) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
         text,
         textAlign: pw.TextAlign.center,
         style: pw.TextStyle(
+          font: font,
           color: PdfColors.white,
-          fontWeight: pw.FontWeight.bold,
           fontSize: 10,
         ),
       ),
     );
   }
 
-  static pw.Widget _buildTableCell(String text,
-      {bool center = false, bool right = false, bool bold = false}) {
+  static pw.Widget _buildTableCell(String text, pw.Font font,
+      {bool center = false, bool right = false}) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
@@ -267,29 +282,27 @@ class PdfGenerator {
             : center
                 ? pw.TextAlign.center
                 : pw.TextAlign.left,
-        style: pw.TextStyle(
-          fontSize: 9,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
+        style: pw.TextStyle(font: font, fontSize: 9),
       ),
     );
   }
 
-  static pw.Widget _buildConditions(Estimate estimate) {
+  static pw.Widget _buildConditions(
+      Estimate estimate, pw.Font fontBase, pw.Font fontBold) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _buildConditionRow('견적유효기간', estimate.validityPeriod),
-        _buildConditionRow('제품인수장소', estimate.deliveryPlace),
-        _buildConditionRow('납 기', estimate.deliveryDate),
-        _buildConditionRow('계약조건', estimate.paymentTerms),
+        _buildConditionRow('견적유효기간', estimate.validityPeriod, fontBase, fontBold),
+        _buildConditionRow('제품인수장소', estimate.deliveryPlace, fontBase, fontBold),
+        _buildConditionRow('납 기', estimate.deliveryDate, fontBase, fontBold),
+        _buildConditionRow('계약조건', estimate.paymentTerms, fontBase, fontBold),
         pw.SizedBox(height: 8),
         ...estimate.notes.asMap().entries.map((entry) {
           return pw.Padding(
             padding: const pw.EdgeInsets.only(left: 12, bottom: 2),
             child: pw.Text(
               '${entry.key + 1}) ${entry.value}',
-              style: const pw.TextStyle(fontSize: 9),
+              style: pw.TextStyle(font: fontBase, fontSize: 9),
             ),
           );
         }),
@@ -297,7 +310,8 @@ class PdfGenerator {
     );
   }
 
-  static pw.Widget _buildConditionRow(String label, String value) {
+  static pw.Widget _buildConditionRow(
+      String label, String value, pw.Font fontBase, pw.Font fontBold) {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 2),
       child: pw.Row(
@@ -307,18 +321,20 @@ class PdfGenerator {
             width: 80,
             child: pw.Text(
               '$label :',
-              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(font: fontBold, fontSize: 9),
             ),
           ),
           pw.Expanded(
-            child: pw.Text(value, style: const pw.TextStyle(fontSize: 9)),
+            child: pw.Text(
+                value, style: pw.TextStyle(font: fontBase, fontSize: 9)),
           ),
         ],
       ),
     );
   }
 
-  static pw.Widget _buildDetailPage(Estimate estimate) {
+  static pw.Widget _buildDetailPage(
+      Estimate estimate, pw.Font fontBase, pw.Font fontBold) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
@@ -326,27 +342,23 @@ class PdfGenerator {
         pw.Center(
           child: pw.Text(
             '내   역   서',
-            style: pw.TextStyle(
-              fontSize: 20,
-              fontWeight: pw.FontWeight.bold,
-            ),
+            style: pw.TextStyle(font: fontBold, fontSize: 20),
           ),
         ),
         pw.SizedBox(height: 4),
         pw.Center(
           child: pw.Text(
             estimate.projectName,
-            style: const pw.TextStyle(fontSize: 12),
+            style: pw.TextStyle(font: fontBase, fontSize: 12),
           ),
         ),
         pw.SizedBox(height: 16),
-
-        // 테이블
+        // A4 가로(landscape) 내용 영역에 맞춘 비율 열 너비 - 페이지 넘침 없이 가독성 확보
         pw.Table(
           border: pw.TableBorder.all(),
           columnWidths: {
             0: const pw.FlexColumnWidth(0.5),
-            1: const pw.FlexColumnWidth(2),
+            1: const pw.FlexColumnWidth(2.5),
             2: const pw.FlexColumnWidth(1.5),
             3: const pw.FlexColumnWidth(0.5),
             4: const pw.FlexColumnWidth(0.5),
@@ -356,87 +368,95 @@ class PdfGenerator {
             8: const pw.FlexColumnWidth(1),
             9: const pw.FlexColumnWidth(1),
             10: const pw.FlexColumnWidth(1),
-            11: const pw.FlexColumnWidth(1),
+            11: const pw.FlexColumnWidth(0.5),
           },
           children: [
-            // 헤더
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColors.grey800),
               children: [
-                _buildDetailHeader('No'),
-                _buildDetailHeader('품명'),
-                _buildDetailHeader('규격'),
-                _buildDetailHeader('단위'),
-                _buildDetailHeader('수량'),
-                _buildDetailHeader('재료비\n단가'),
-                _buildDetailHeader('재료비\n금액'),
-                _buildDetailHeader('노무비\n단가'),
-                _buildDetailHeader('노무비\n금액'),
-                _buildDetailHeader('합계\n단가'),
-                _buildDetailHeader('합계\n금액'),
-                _buildDetailHeader('비고'),
+                _buildDetailHeader('No', fontBold),
+                _buildDetailHeader('품명', fontBold),
+                _buildDetailHeader('규격', fontBold),
+                _buildDetailHeader('단위', fontBold),
+                _buildDetailHeader('수량', fontBold),
+                _buildDetailHeader('재료비\n단가', fontBold),
+                _buildDetailHeader('재료비\n금액', fontBold),
+                _buildDetailHeader('노무비\n단가', fontBold),
+                _buildDetailHeader('노무비\n금액', fontBold),
+                _buildDetailHeader('합계\n단가', fontBold),
+                _buildDetailHeader('합계\n금액', fontBold),
+                _buildDetailHeader('비고', fontBold),
               ],
             ),
-            // 데이터
             ...estimate.detailItems.map((item) {
               return pw.TableRow(
                 children: [
-                  _buildDetailCell(item.no.toString(), center: true),
-                  _buildDetailCell(item.productName),
-                  _buildDetailCell(item.specification),
-                  _buildDetailCell(item.unit, center: true),
-                  _buildDetailCell(item.quantity.toString(), center: true),
+                  _buildDetailCell(item.no.toString(), fontBase, center: true),
+                  _buildDetailCell(item.productName, fontBase),
+                  _buildDetailCell(item.specification, fontBase),
+                  _buildDetailCell(item.unit, fontBase, center: true),
+                  _buildDetailCell(item.quantity.toString(), fontBase, center: true),
                   _buildDetailCell(
                       CurrencyFormatter.format(item.materialUnitPrice),
+                      fontBase,
                       right: true),
-                  _buildDetailCell(CurrencyFormatter.format(item.materialAmount),
+                  _buildDetailCell(
+                      CurrencyFormatter.format(item.materialAmount),
+                      fontBase,
                       right: true),
-                  _buildDetailCell(CurrencyFormatter.format(item.laborUnitPrice),
+                  _buildDetailCell(
+                      CurrencyFormatter.format(item.laborUnitPrice),
+                      fontBase,
                       right: true),
-                  _buildDetailCell(CurrencyFormatter.format(item.laborAmount),
+                  _buildDetailCell(
+                      CurrencyFormatter.format(item.laborAmount),
+                      fontBase,
                       right: true),
-                  _buildDetailCell(CurrencyFormatter.format(item.totalUnitPrice),
+                  _buildDetailCell(
+                      CurrencyFormatter.format(item.totalUnitPrice),
+                      fontBase,
                       right: true),
-                  _buildDetailCell(CurrencyFormatter.format(item.totalAmount),
+                  _buildDetailCell(
+                      CurrencyFormatter.format(item.totalAmount),
+                      fontBase,
                       right: true),
-                  _buildDetailCell(item.note),
+                  _buildDetailCell(item.note, fontBase),
                 ],
               );
             }),
-            // 합계
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColors.grey200),
               children: [
-                _buildDetailCell(''),
-                _buildDetailCell('합계', bold: true, center: true),
-                _buildDetailCell(''),
-                _buildDetailCell(''),
-                _buildDetailCell(''),
-                _buildDetailCell(''),
+                _buildDetailCell('', fontBase),
+                _buildDetailCell('합계', fontBold, center: true),
+                _buildDetailCell('', fontBase),
+                _buildDetailCell('', fontBase),
+                _buildDetailCell('', fontBase),
+                _buildDetailCell('', fontBase),
                 _buildDetailCell(
                   CurrencyFormatter.format(
-                    estimate.detailItems
-                        .fold(0.0, (sum, item) => sum + item.materialAmount),
+                    estimate.detailItems.fold(
+                        0.0, (sum, item) => sum + item.materialAmount),
                   ),
+                  fontBold,
                   right: true,
-                  bold: true,
                 ),
-                _buildDetailCell(''),
+                _buildDetailCell('', fontBase),
                 _buildDetailCell(
                   CurrencyFormatter.format(
-                    estimate.detailItems
-                        .fold(0.0, (sum, item) => sum + item.laborAmount),
+                    estimate.detailItems.fold(
+                        0.0, (sum, item) => sum + item.laborAmount),
                   ),
+                  fontBold,
                   right: true,
-                  bold: true,
                 ),
-                _buildDetailCell(''),
+                _buildDetailCell('', fontBase),
                 _buildDetailCell(
                   CurrencyFormatter.format(estimate.detailTotalAmount),
+                  fontBold,
                   right: true,
-                  bold: true,
                 ),
-                _buildDetailCell(''),
+                _buildDetailCell('', fontBase),
               ],
             ),
           ],
@@ -445,25 +465,25 @@ class PdfGenerator {
     );
   }
 
-  static pw.Widget _buildDetailHeader(String text) {
+  static pw.Widget _buildDetailHeader(String text, pw.Font font) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(4),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       child: pw.Text(
         text,
         textAlign: pw.TextAlign.center,
         style: pw.TextStyle(
+          font: font,
           color: PdfColors.white,
-          fontWeight: pw.FontWeight.bold,
-          fontSize: 8,
+          fontSize: 9,
         ),
       ),
     );
   }
 
-  static pw.Widget _buildDetailCell(String text,
-      {bool center = false, bool right = false, bool bold = false}) {
+  static pw.Widget _buildDetailCell(String text, pw.Font font,
+      {bool center = false, bool right = false}) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(4),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       child: pw.Text(
         text,
         textAlign: right
@@ -471,10 +491,7 @@ class PdfGenerator {
             : center
                 ? pw.TextAlign.center
                 : pw.TextAlign.left,
-        style: pw.TextStyle(
-          fontSize: 8,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
+        style: pw.TextStyle(font: font, fontSize: 9),
       ),
     );
   }
