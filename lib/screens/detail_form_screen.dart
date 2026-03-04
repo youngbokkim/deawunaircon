@@ -423,3 +423,4 @@ class DetailFormScreen extends StatelessWidget {
   }
 }
 
+
