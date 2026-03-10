@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,17 +8,27 @@ import '../models/estimate.dart';
 import 'currency_formatter.dart';
 
 class PdfGenerator {
+  static ByteData _copyByteData(ByteData source) {
+    return source.buffer.asUint8List().buffer.asByteData(0, source.lengthInBytes);
+  }
+
   static Future<Uint8List> generateEstimatePdf(Estimate estimate) async {
-    // 한글 표시: 앱 번들 폰트 우선 사용 (맥 PDF 미리보기 등에서 안정적), 없으면 Google Fonts
     pw.Font fontBase;
     pw.Font fontBold;
     try {
       final data = await rootBundle.load('assets/fonts/NotoSansKR-Variable.ttf');
-      fontBase = pw.Font.ttf(data);
-      fontBold = fontBase; // Variable font 하나로 통일
+      final copy = _copyByteData(data);
+      fontBase = pw.Font.ttf(copy);
+      fontBold = fontBase;
     } catch (_) {
-      fontBase = await PdfGoogleFonts.notoSansKRRegular();
-      fontBold = await PdfGoogleFonts.notoSansKRBold();
+      if (kIsWeb) {
+        // 웹: Google Fonts 네트워크 요청이 실패할 수 있으므로 기본 폰트 사용
+        fontBase = pw.Font.helvetica();
+        fontBold = pw.Font.helveticaBold();
+      } else {
+        fontBase = await PdfGoogleFonts.notoSansKRRegular();
+        fontBold = await PdfGoogleFonts.notoSansKRBold();
+      }
     }
     final theme = pw.ThemeData.withFont(
       base: fontBase,

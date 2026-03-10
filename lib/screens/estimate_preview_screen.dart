@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/estimate_provider.dart';
@@ -6,6 +7,7 @@ import '../utils/app_theme.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/file_saver.dart';
 import '../utils/pdf_generator.dart';
+import '../utils/web_download.dart';
 import 'pdf_preview_screen.dart';
 
 class EstimatePreviewScreen extends StatelessWidget {
@@ -62,32 +64,38 @@ class EstimatePreviewScreen extends StatelessWidget {
     try {
       final bytes = await PdfGenerator.generateEstimatePdf(estimate);
       String? path;
-      try {
-        path = await FilePicker.platform.saveFile(
-          bytes: bytes,
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['pdf'],
-        );
-      } catch (_) {
-        path = await FilePicker.platform.saveFile(
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['pdf'],
-        );
-      }
-      if (path != null && path.isNotEmpty) {
-        await saveBytesToFile(path, bytes);
+      if (kIsWeb) {
+        downloadBytesWeb(bytes, fileName);
+      } else {
+        try {
+          path = await FilePicker.platform.saveFile(
+            bytes: bytes,
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: ['pdf'],
+          );
+        } catch (_) {
+          path = await FilePicker.platform.saveFile(
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: ['pdf'],
+          );
+        }
+        if (path != null && path.isNotEmpty) {
+          await saveBytesToFile(path, bytes);
+        }
       }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              path != null && path.isNotEmpty
-                  ? 'PDF가 저장되었습니다.\n$path'
-                  : path == null
-                      ? '저장이 취소되었습니다.'
-                      : 'PDF 파일이 저장되었습니다.',
+              kIsWeb
+                  ? 'PDF가 다운로드되었습니다.'
+                  : path != null && path.isNotEmpty
+                      ? 'PDF가 저장되었습니다.\n$path'
+                      : path == null
+                          ? '저장이 취소되었습니다.'
+                          : 'PDF 파일이 저장되었습니다.',
             ),
             duration: const Duration(seconds: 3),
           ),
