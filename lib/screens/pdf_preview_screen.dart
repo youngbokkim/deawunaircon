@@ -32,7 +32,7 @@ class PdfPreviewScreen extends StatelessWidget {
       body: PdfPreview(
         build: (format) =>
             PdfGenerator.generateEstimatePdf(estimate),
-        allowSharing: true,
+        allowSharing: !kIsWeb,
         allowPrinting: true,
         initialPageFormat: PdfPageFormat.a4,
         pdfFileName: '견적서_${estimate.projectName}.pdf',
@@ -47,9 +47,18 @@ class PdfPreviewScreen extends StatelessWidget {
     try {
       final bytes = await PdfGenerator.generateEstimatePdf(estimate);
       String? path;
-      if (kIsWeb) {
+      try {
         downloadBytesWeb(bytes, fileName);
-      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('PDF가 다운로드되었습니다.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      } on UnsupportedError {
         try {
           path = await FilePicker.platform.saveFile(
             bytes: bytes,
@@ -72,13 +81,9 @@ class PdfPreviewScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              kIsWeb
-                  ? 'PDF가 다운로드되었습니다.'
-                  : path != null && path.isNotEmpty
-                      ? 'PDF가 저장되었습니다.\n$path'
-                      : path == null
-                          ? '저장이 취소되었습니다.'
-                          : 'PDF 파일이 저장되었습니다.',
+              path != null && path.isNotEmpty
+                  ? 'PDF가 저장되었습니다.\n$path'
+                  : '저장이 취소되었습니다.',
             ),
             duration: const Duration(seconds: 3),
           ),
