@@ -4,8 +4,21 @@ import '../providers/estimate_provider.dart';
 import '../utils/app_theme.dart';
 import 'estimate_form_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<EstimateProvider>().loadFromServerIfNeeded();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -210,9 +223,48 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _showEstimateList(BuildContext context) {
-    final provider = context.read<EstimateProvider>();
+  Future<void> _confirmDeleteEstimate(
+    BuildContext context,
+    EstimateProvider provider,
+    String projectName,
+    String id,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('견적서 삭제'),
+        content: Text(
+          '"$projectName" 견적서를 삭제하시겠습니까?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final ok = await provider.deleteEstimate(id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? '견적서가 삭제되었습니다.' : '삭제에 실패했습니다. 다시 시도해 주세요.',
+        ),
+        backgroundColor: ok ? AppTheme.successColor : Colors.red,
+      ),
+    );
+  }
 
+  void _showEstimateList(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -247,8 +299,10 @@ class HomeScreen extends StatelessWidget {
             ),
             const Divider(height: 1),
             Expanded(
-              child: provider.estimates.isEmpty
-                  ? Center(
+              child: Consumer<EstimateProvider>(
+                builder: (context, provider, _) {
+                  if (provider.estimates.isEmpty) {
+                    return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -267,57 +321,79 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: provider.estimates.length,
-                      itemBuilder: (context, index) {
-                        final estimate = provider.estimates[index];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.accentColor.withValues(
-                                  alpha: 0.1,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: provider.estimates.length,
+                    itemBuilder: (context, index) {
+                      final estimate = provider.estimates[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(16),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentColor.withValues(
+                                alpha: 0.1,
                               ),
-                              child: const Icon(
-                                Icons.description_outlined,
-                                color: AppTheme.accentColor,
-                              ),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            title: Text(
-                              estimate.projectName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            child: const Icon(
+                              Icons.description_outlined,
+                              color: AppTheme.accentColor,
                             ),
-                            subtitle: Text(
-                              '작성일: ${estimate.estimateDate.toString().substring(0, 10)}',
-                            ),
-                            trailing: const Icon(
-                              Icons.arrow_forward_ios,
-                              size: 16,
-                            ),
-                            onTap: () {
-                              provider.setCurrentEstimate(estimate);
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const EstimateFormScreen(),
-                                ),
-                              );
-                            },
                           ),
-                        );
-                      },
-                    ),
+                          title: Text(
+                            estimate.projectName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '작성일: ${estimate.estimateDate.toString().substring(0, 10)}',
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.grey[600],
+                                  size: 22,
+                                ),
+                                tooltip: '삭제',
+                                onPressed: () => _confirmDeleteEstimate(
+                                  context,
+                                  provider,
+                                  estimate.projectName,
+                                  estimate.id,
+                                ),
+                              ),
+                              const Icon(
+                                Icons.arrow_forward_ios,
+                                size: 16,
+                              ),
+                            ],
+                          ),
+                          onTap: () {
+                            provider.setCurrentEstimate(estimate);
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const EstimateFormScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),

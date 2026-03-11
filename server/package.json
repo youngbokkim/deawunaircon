@@ -1,0 +1,14 @@
+{
+  "name": "estimate-api-server",
+  "version": "1.0.0",
+  "description": "견적서 저장/조회 API 서버",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  }
+}

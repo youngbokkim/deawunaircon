@@ -149,7 +149,9 @@ class Estimate {
     return Estimate(
       id: json['id'],
       projectName: json['projectName'] ?? '',
-      estimateDate: DateTime.parse(json['estimateDate']),
+      estimateDate: json['estimateDate'] != null
+          ? DateTime.parse(json['estimateDate'].toString())
+          : DateTime.now(),
       companyInfo: CompanyInfo.fromJson(json['companyInfo'] ?? {}),
       items: (json['items'] as List?)
               ?.map((e) => EstimateItem.fromJson(e))

@@ -19,12 +19,15 @@ class DetailFormScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.save_outlined),
             tooltip: '저장',
-            onPressed: () {
-              context.read<EstimateProvider>().saveEstimate();
+            onPressed: () async {
+              final ok = await context.read<EstimateProvider>().saveEstimate();
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('내역서가 저장되었습니다'),
-                  backgroundColor: AppTheme.successColor,
+                SnackBar(
+                  content: Text(
+                    ok ? '내역서가 서버에 저장되었습니다' : '저장 실패. 서버 연결을 확인해 주세요.',
+                  ),
+                  backgroundColor: ok ? AppTheme.successColor : Colors.red,
                 ),
               );
             },
